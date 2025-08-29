@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Hourly Pay Tracker</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 30px;
+    }
+
+    input,
+    button {
+      padding: 10px;
+      font-size: 1em;
+      margin: 5px;
+    }
+
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 90%;
+    }
+
+    th,
+    td {
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Hourly Pay Tracker</h1>
+
+  <label for="rate">Hourly Rate ($/hr):</label>
+  <input type="number" id="rate" step="0.01" placeholder="e.g. 20" />
+
+  <div>
+    <button onclick="startTimer()">Start</button>
+    <button onclick="pauseTimer()">Pause</button>
+    <button onclick="stopTimer()">Stop</button>
+    <button onclick="exportCSV()">Export CSV</button>
+  </div>
+
+  <h2>Current Session</h2>
+  <p>Time Worked: <span id="time">00:00:00</span></p>
+  <p>Earnings: $<span id="earnings">0.00</span></p>
+
+  <h2>Session History</h2>
+  <table id="sessionTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Start Time</th>
+        <th>End Time</th>
+        <th>Duration</th>
+        <th>Pay</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    let startTime = null;
+    let elapsedTime = 0;
+    let timerInterval = null;
+    const timeDisplay = document.getElementById('time');
+    const earningsDisplay = document.getElementById('earnings');
+    const sessionTableBody = document.querySelector('#sessionTable tbody');
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      return `${hours}:${minutes}:${seconds}`;
+    }
+
+    function updateDisplay() {
+      const now = Date.now();
+      const total = elapsedTime + (startTime ? now - startTime : 0);
+      timeDisplay.textContent = formatTime(total);
+      const rate = parseFloat(document.getElementById('rate').value) || 0;
+      const hoursWorked = total / (1000 * 60 * 60);
+      const earnings = hoursWorked * rate;
+      earningsDisplay.textContent = earnings.toFixed(2);
+    }
+
+    function startTimer() {
+      if (!startTime) {
+        startTime = Date.now();
+        timerInterval = setInterval(updateDisplay, 1000);
+      }
+    }
+
+    function pauseTimer() {
+      if (startTime) {
+        elapsedTime += Date.now() - startTime;
+        clearInterval(timerInterval);
+        startTime = null;
+      }
+    }
+
+    function stopTimer() {
+      if (!startTime && elapsedTime === 0) return; // Nothing to stop
+      const now = Date.now();
+      const endTime = now;
+      const total = elapsedTime + (startTime ? endTime - startTime : 0);
+      const rate = parseFloat(document.getElementById('rate').value) || 0;
+      const pay = (total / (1000 * 60 * 60)) * rate;
+      const session = {
+        start: new Date(startTime || now).toLocaleString(),
+        end: new Date(endTime).toLocaleString(),
+        duration: formatTime(total),
+        pay: pay.toFixed(2)
+      };
+      saveSession(session);
+      renderSessions();
+      // Reset
+      clearInterval(timerInterval);
+      startTime = null;
+      elapsedTime = 0;
+      timeDisplay.textContent = '00:00:00';
+      earningsDisplay.textContent = '0.00';
+    }
+
+    function saveSession(session) {
+      const sessions = JSON.parse(localStorage.getItem('paySessions') || '[]');
+      sessions.push(session);
+      localStorage.setItem('paySessions', JSON.stringify(sessions));
+    }
+
+    function renderSessions() {
+      const sessions = JSON.parse(localStorage.getItem('paySessions') || '[]');
+      sessionTableBody.innerHTML = '';
+      sessions.forEach((session, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+<td>${index + 1}</td>
+<td>${session.start}</td>
+<td>${session.end}</td>
+<td>${session.duration}</td>
+<td>$${session.pay}</td>
+        `;
+        sessionTableBody.appendChild(row);
+      });
+    }
+
+    function exportCSV() {
+      const sessions = JSON.parse(localStorage.getItem('paySessions') || '[]');
+      if (sessions.length === 0) {
+        alert('No data to export.');
+        return;
+      }
+      const header = ['Session #', 'Start Time', 'End Time', 'Duration', 'Pay'];
+      const rows = sessions.map((s, i) => [i + 1, s.start, s.end, s.duration, `$${s.pay}`]);
+      const csvContent = [header, ...rows].map(row => row.join(',')).join('\n');
+      const blob = new Blob([csvContent], {
+        type: 'text/csv'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pay_sessions.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    // Load previous sessions on page load
+    window.onload = renderSessions;
+  </script>
+</body>
+
+</html>
